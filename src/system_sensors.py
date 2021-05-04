@@ -10,7 +10,6 @@ import time
 from datetime import timedelta
 from re import findall
 from subprocess import check_output
-from rpi_bad_power import new_under_voltage
 import paho.mqtt.client as mqtt
 import psutil
 import pytz
@@ -23,6 +22,11 @@ try:
     apt_disabled = False
 except ImportError:
     apt_disabled = True
+try:
+    from rpi_bad_power import new_under_voltage
+    is_rpi = True
+except ImportError:
+    is_rpi = False
 UTC = pytz.utc
 DEFAULT_TIME_ZONE = None
 
@@ -106,7 +110,6 @@ def updateSensors():
         + f'"memory_use": {get_memory_usage()},'
         + f'"cpu_usage": {get_cpu_usage()},'
         + f'"swap_usage": {get_swap_usage()},'
-        + f'"power_status": "{get_rpi_power_status()}",'
         + f'"last_boot": "{get_last_boot()}",'
         + f'"last_message": "{get_last_message()}",'
         + f'"host_name": "{get_host_name()}",'
@@ -114,6 +117,8 @@ def updateSensors():
         + f'"host_os": "{get_host_os()}",'
         + f'"host_arch": "{get_host_arch()}"'
     )
+    if is_rpi:
+        payload_str = payload_str + f'", power_status": "{get_rpi_power_status()}"'
     if "check_available_updates" in settings and settings["check_available_updates"] and not apt_disabled:
         payload_str = payload_str + f', "updates": {get_updates()}' 
     if "check_wifi_strength" in settings and settings["check_wifi_strength"]:
@@ -180,7 +185,8 @@ def get_wifi_strength():  # check_output(["/proc/net/wireless", "grep wlan0"])
 
 
 def get_rpi_power_status():
-    return _underVoltage.get()
+    if is_rpi:
+        return _underVoltage.get()
 
 def get_host_name():
     return socket.gethostname()
@@ -569,6 +575,8 @@ if __name__ == "__main__":
     if "update_interval" in settings:
         WAIT_TIME_SECONDS = settings["update_interval"]
     mqttClient = mqtt.Client(client_id=settings["client_id"])
+    if settings['mqtt']['tls']:
+        mqttClient.tls_set()
     mqttClient.on_connect = on_connect                      #attach function to callback
     mqttClient.on_message = on_message
     deviceName = settings["deviceName"].replace(" ", "").lower()
@@ -589,7 +597,8 @@ if __name__ == "__main__":
         send_config_message(mqttClient)
     except:
         write_message_to_console("something whent wrong")
-    _underVoltage = new_under_voltage()
+    if is_rpi:
+        _underVoltage = new_under_voltage()
     job = Job(interval=timedelta(seconds=WAIT_TIME_SECONDS), execute=updateSensors)
     job.start()
 

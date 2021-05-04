@@ -3,6 +3,7 @@ mqtt:
   port: 1234 #defaults to 1883
   user: test
   password: test
+  tls: false
 deviceName: test
 client_id: test
 timezone: Europe/Brussels
