@@ -110,14 +110,13 @@ def updateSensors():
         + f'"cpu_usage": {get_cpu_usage()},'
         + f'"swap_usage": {get_swap_usage()},'
         + f'"last_boot": "{get_last_boot()}",'
+        + f'"power_status": "{get_rpi_power_status()}",'
         + f'"last_message": "{get_last_message()}",'
         + f'"host_name": "{get_host_name()}",'
         + f'"host_ip": "{get_host_ip()}",'
         + f'"host_os": "{get_host_os()}",'
         + f'"host_arch": "{get_host_arch()}"'
     )
-    if is_rpi:
-        payload_str = payload_str + f'", power_status": "{get_rpi_power_status()}"'
     if "check_available_updates" in settings and settings["check_available_updates"] and not apt_disabled:
         payload_str = payload_str + f', "updates": {get_updates()}' 
     if "check_wifi_strength" in settings and settings["check_wifi_strength"]:
@@ -229,11 +228,11 @@ def get_service_status(service_name):
         process_statuses = re.findall(r'status=(\d)/', status_blob)
         active = re.search(r'Active: (.*) since', status_blob).group(1)
         if active != "active (running)" or any(process_statuses):
-            return "on"
+            return "True"
         else:
-            return "off"
+            return "False"
     except CalledProcessError:
-        return 'on'
+        return 'True'
 
 def remove_old_topics():
     mqttClient.publish(
