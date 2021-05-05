@@ -226,15 +226,10 @@ def get_host_arch():
 def get_service_status(service_name):
     try:
         status_blob = check_output(['systemctl', 'status', service_name]).decode('utf-8')
-        active_data = re.search(r'Active: (.*) since (.*);', status_blob)
-        active_status = active_data.group(1)
-        active_since = active_data.group(2)
-        return {
-            'activity_status': active_status,
-            'activity_since': active_since
-        }
+        process_statuses = re.findall(r'status=(\d)/', status_blob)
+        return any(process_statuses) # Non-zero status indicates problems
     except CalledProcessError:
-        return {}
+        return True
 
 def remove_old_topics():
     mqttClient.publish(
@@ -316,7 +311,7 @@ def remove_old_topics():
     if "services" in settings:
         for service_name in settings["services"]:
             mqttClient.publish(
-                topic=f"homeassistant/sensor/{deviceNameDisplay}/{deviceNameDisplay}ServiceStatus{service_name}/config",
+                topic=f"homeassistant/binary_sensor/{deviceNameDisplay}/{deviceNameDisplay}ServiceStatus{service_name}/config",
                 payload='',
                 qos=1,
                 retain=False,
@@ -577,19 +572,19 @@ def send_config_message(mqttClient):
     if "services" in settings:
         for service_name in settings["services"]:
             mqttClient.publish(
-                topic=f"homeassistant/sensor/{deviceName}/disk_use_{service_name.lower()}/config",
-                payload=f"{{\"name\":\"{deviceNameDisplay} Service {service_name}\","
+                topic=f"homeassistant/binary_sensor/{deviceName}/service_up_{service_name.lower()}/config",
+                payload='{"device_class":"problem",'
+                        + f"\"name\":\"{deviceNameDisplay} Service Status\","
                         + f"\"state_topic\":\"system-sensors/sensor/{deviceName}/state\","
-                        + f"\"value_template\":\"{{{{value_json.service_{drive.lower()}}}}}\","
-                        + f"\"unique_id\":\"{deviceName}_sensor_service_{drive.lower()}\","
+                        + f"\"value_template\":\"{{{{value_json.service_status_{service_name.lower()}}}}}\","
+                        + f"\"unique_id\":\"{deviceName}_sensor_service_status_{service_name.lower()}\","
                         + f"\"availability_topic\":\"system-sensors/sensor/{deviceName}/availability\","
                         + f"\"device\":{{\"identifiers\":[\"{deviceName}_sensor\"],"
-                        + f"\"name\":\"{deviceNameDisplay} Sensors\",\"model\":\"RPI {deviceNameDisplay}\", \"manufacturer\":\"RPI\"}},"
-                        + f"\"icon\":\"mdi:mdi-settings-outline\"}}",
+                        + f"\"name\":\"{deviceNameDisplay} Sensors\",\"model\":\"RPI {deviceNameDisplay}\", \"manufacturer\":\"RPI\"}}"
+                        + f"}}",
                 qos=1,
                 retain=True,
             )
-
     mqttClient.publish(f"system-sensors/sensor/{deviceName}/availability", "online", retain=True)
 
 
