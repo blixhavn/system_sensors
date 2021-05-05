@@ -9,10 +9,12 @@ import threading
 import time
 from datetime import timedelta
 from re import findall
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError
+from rpi_bad_power import new_under_voltage
 import paho.mqtt.client as mqtt
 import psutil
 import pytz
+import re
 import yaml
 import csv
 from pytz import timezone
@@ -22,11 +24,6 @@ try:
     apt_disabled = False
 except ImportError:
     apt_disabled = True
-try:
-    from rpi_bad_power import new_under_voltage
-    is_rpi = True
-except ImportError:
-    is_rpi = False
 UTC = pytz.utc
 DEFAULT_TIME_ZONE = None
 
@@ -37,6 +34,8 @@ with open("/etc/os-release") as f:
     for row in reader:
         if row:
             OS_DATA[row[0]] = row[1]
+
+is_rpi = True if 'rasp' in OS_DATA["ID"] else False
 
 mqttClient = None
 WAIT_TIME_SECONDS = 60
@@ -128,6 +127,11 @@ def updateSensors():
             payload_str = (
                 payload_str + f', "disk_use_{drive.lower()}": {get_disk_usage(settings["external_drives"][drive])}'
             )
+    if "services" in settings:
+        for service_name in settings['services']:
+            payload_str = (
+                payload_str + f', "service_status_{service_name.lower()}": {get_service_status(service_name)}'
+            )
     payload_str = payload_str + "}"
     mqttClient.publish(
         topic=f"system-sensors/sensor/{deviceName}/state",
@@ -147,12 +151,15 @@ def get_updates():
 # Temperature method depending on system distro
 def get_temp():
     temp = "";
-    if "rasp" in OS_DATA["ID"]:
+    if is_rpi:
         reading = check_output(["vcgencmd", "measure_temp"]).decode("UTF-8")
         temp = str(findall("\d+\.\d+", reading)[0])
     else:
-        reading = check_output(["cat", "/sys/class/thermal/thermal_zone0/temp"]).decode("UTF-8")
-        temp = str(reading[0] + reading[1] + "." + reading[2])
+        try:
+            reading = check_output(["cat", "/sys/class/thermal/thermal_zone0/temp"]).decode("UTF-8")
+            temp = str(reading[0] + reading[1] + "." + reading[2])
+        except CalledProcessError:
+            pass
     return temp
 
 def get_disk_usage(path):
@@ -215,6 +222,19 @@ def get_host_arch():
         return platform.machine()
     except:
         return "Unknown"
+
+def get_service_status(service_name):
+    try:
+        status_blob = check_output(['systemctl', 'status', service_name]).decode('utf-8')
+        active_data = re.search(r'Active: (.*) since (.*);', status_blob)
+        active_status = active_data.group(1)
+        active_since = active_data.group(2)
+        return {
+            'activity_status': active_status,
+            'activity_since': active_since
+        }
+    except CalledProcessError:
+        return {}
 
 def remove_old_topics():
     mqttClient.publish(
@@ -288,6 +308,15 @@ def remove_old_topics():
         for drive in settings["external_drives"]:
             mqttClient.publish(
                 topic=f"homeassistant/sensor/{deviceNameDisplay}/{deviceNameDisplay}DiskUse{drive}/config",
+                payload='',
+                qos=1,
+                retain=False,
+            )
+
+    if "services" in settings:
+        for service_name in settings["services"]:
+            mqttClient.publish(
+                topic=f"homeassistant/sensor/{deviceNameDisplay}/{deviceNameDisplay}ServiceStatus{service_name}/config",
                 payload='',
                 qos=1,
                 retain=False,
@@ -544,7 +573,22 @@ def send_config_message(mqttClient):
                 qos=1,
                 retain=True,
             )
-            
+
+    if "services" in settings:
+        for service_name in settings["services"]:
+            mqttClient.publish(
+                topic=f"homeassistant/sensor/{deviceName}/disk_use_{service_name.lower()}/config",
+                payload=f"{{\"name\":\"{deviceNameDisplay} Service {service_name}\","
+                        + f"\"state_topic\":\"system-sensors/sensor/{deviceName}/state\","
+                        + f"\"value_template\":\"{{{{value_json.service_{drive.lower()}}}}}\","
+                        + f"\"unique_id\":\"{deviceName}_sensor_service_{drive.lower()}\","
+                        + f"\"availability_topic\":\"system-sensors/sensor/{deviceName}/availability\","
+                        + f"\"device\":{{\"identifiers\":[\"{deviceName}_sensor\"],"
+                        + f"\"name\":\"{deviceNameDisplay} Sensors\",\"model\":\"RPI {deviceNameDisplay}\", \"manufacturer\":\"RPI\"}},"
+                        + f"\"icon\":\"mdi:mdi-settings-outline\"}}",
+                qos=1,
+                retain=True,
+            )
 
     mqttClient.publish(f"system-sensors/sensor/{deviceName}/availability", "online", retain=True)
 
@@ -584,7 +628,7 @@ if __name__ == "__main__":
     mqttClient.will_set(f"system-sensors/sensor/{deviceName}/availability", "offline", retain=True)
     if "user" in settings["mqtt"]:
         mqttClient.username_pw_set(
-            settings["mqtt"]["user"], settings["mqtt"]["password"]
+            settings["mqtt"]["user"], password=settings["mqtt"]["password"]
         )  # Username and pass if configured otherwise you should comment out this
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
