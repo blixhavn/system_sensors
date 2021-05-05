@@ -128,9 +128,9 @@ def updateSensors():
                 payload_str + f', "disk_use_{drive.lower()}": {get_disk_usage(settings["external_drives"][drive])}'
             )
     if "services" in settings:
-        for service_name in settings['services']:
+        for service in settings['services']:
             payload_str = (
-                payload_str + f', "service_status_{service_name.lower()}": {get_service_status(service_name)}'
+                payload_str + f', "service_status_{service['name'].lower()}": {get_service_status(service['name'])}'
             )
     payload_str = payload_str + "}"
     mqttClient.publish(
@@ -227,9 +227,9 @@ def get_service_status(service_name):
     try:
         status_blob = check_output(['systemctl', 'status', service_name]).decode('utf-8')
         process_statuses = re.findall(r'status=(\d)/', status_blob)
-        return any(process_statuses) # Non-zero status indicates problems
+        problem = 'on' if any(process_statuses) else 'off' # Non-zero status indicates problems
     except CalledProcessError:
-        return True
+        return 'on'
 
 def remove_old_topics():
     mqttClient.publish(
@@ -309,9 +309,9 @@ def remove_old_topics():
             )
 
     if "services" in settings:
-        for service_name in settings["services"]:
+        for service in settings["services"]:
             mqttClient.publish(
-                topic=f"homeassistant/binary_sensor/{deviceNameDisplay}/{deviceNameDisplay}ServiceStatus{service_name}/config",
+                topic=f"homeassistant/binary_sensor/{deviceNameDisplay}/{deviceNameDisplay}ServiceStatus{service['name']}/config",
                 payload='',
                 qos=1,
                 retain=False,
@@ -570,14 +570,14 @@ def send_config_message(mqttClient):
             )
 
     if "services" in settings:
-        for service_name in settings["services"]:
+        for service in settings["services"]:
             mqttClient.publish(
-                topic=f"homeassistant/binary_sensor/{deviceName}/service_up_{service_name.lower()}/config",
+                topic=f"homeassistant/binary_sensor/{deviceName}/service_up_{service['name'].lower()}/config",
                 payload='{"device_class":"problem",'
-                        + f"\"name\":\"{deviceNameDisplay} Service Status\","
+                        + f"\"name\":\"{service['display']}\","
                         + f"\"state_topic\":\"system-sensors/sensor/{deviceName}/state\","
-                        + f"\"value_template\":\"{{{{value_json.service_status_{service_name.lower()}}}}}\","
-                        + f"\"unique_id\":\"{deviceName}_sensor_service_status_{service_name.lower()}\","
+                        + f"\"value_template\":\"{{{{value_json.service_status_{service['name'].lower()}}}}}\","
+                        + f"\"unique_id\":\"{deviceName}_sensor_service_status_{service['name'].lower()}\","
                         + f"\"availability_topic\":\"system-sensors/sensor/{deviceName}/availability\","
                         + f"\"device\":{{\"identifiers\":[\"{deviceName}_sensor\"],"
                         + f"\"name\":\"{deviceNameDisplay} Sensors\",\"model\":\"RPI {deviceNameDisplay}\", \"manufacturer\":\"RPI\"}}"
