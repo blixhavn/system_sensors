@@ -149,7 +149,7 @@ def get_updates():
 
 # Temperature method depending on system distro
 def get_temp():
-    temp = "";
+    temp = "0";
     if is_rpi:
         reading = check_output(["vcgencmd", "measure_temp"]).decode("UTF-8")
         temp = str(findall("\d+\.\d+", reading)[0])
