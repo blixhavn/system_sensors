@@ -130,7 +130,7 @@ def updateSensors():
     if "services" in settings:
         for service in settings['services']:
             payload_str = (
-                payload_str + f', "service_status_{service['name'].lower()}": {get_service_status(service['name'])}'
+                payload_str + f""", "service_status_{service['name'].lower()}": {get_service_status(service['name'])}"""
             )
     payload_str = payload_str + "}"
     mqttClient.publish(
@@ -227,7 +227,11 @@ def get_service_status(service_name):
     try:
         status_blob = check_output(['systemctl', 'status', service_name]).decode('utf-8')
         process_statuses = re.findall(r'status=(\d)/', status_blob)
-        problem = 'on' if any(process_statuses) else 'off' # Non-zero status indicates problems
+        active = re.search(r'Active: (.*) since', status_blob).group(1)
+        if active != "active (running)" or any(process_statuses):
+            return "on"
+        else:
+            return "off"
     except CalledProcessError:
         return 'on'
 
