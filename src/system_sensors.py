@@ -129,7 +129,7 @@ def updateSensors():
     if "services" in settings:
         for service in settings['services']:
             payload_str = (
-                payload_str + f""", "service_status_{service['name'].lower()}": "{get_service_status(service['name'])}""""
+                payload_str + f""", "service_status_{service['name'].lower()}": "{get_service_status(service['name'])}" """
             )
     payload_str = payload_str + "}"
     mqttClient.publish(
