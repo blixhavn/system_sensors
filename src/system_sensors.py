@@ -6,6 +6,7 @@ import sys
 import socket
 import platform
 import threading
+import os
 import time
 from datetime import timedelta
 from re import findall
@@ -18,6 +19,8 @@ import re
 import yaml
 import csv
 from pytz import timezone
+
+os.nice(20)
 
 try:
     import apt
