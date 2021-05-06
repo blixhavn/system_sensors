@@ -225,14 +225,14 @@ def get_host_arch():
 def get_service_status(service_name):
     try:
         status_blob = check_output(['systemctl', 'status', service_name]).decode('utf-8')
-        process_statuses = re.findall(r'status=(\d)/', status_blob)
+        process_statuses = map(int, re.findall(r'status=(\d)/', status_blob))
         active = re.search(r'Active: (.*) since', status_blob).group(1)
         if active != "active (running)" or any(process_statuses):
-            return "True"
+            return "ON"
         else:
-            return "False"
+            return "OFF"
     except CalledProcessError:
-        return 'True'
+        return 'ON'
 
 def remove_old_topics():
     mqttClient.publish(
@@ -577,9 +577,11 @@ def send_config_message(mqttClient):
             mqttClient.publish(
                 topic=f"homeassistant/binary_sensor/{deviceName}/service_up_{service['name'].lower()}/config",
                 payload='{"device_class":"problem",'
-                        + f"\"name\":\"{service['display']}\","
+                        + f"\"name\":\"{deviceNameDisplay} service {service['display']}\","
+                        + "\"payload_on\": \"ON\","
+                        + "\"payload_off\": \"OFF\","
                         + f"\"state_topic\":\"system-sensors/sensor/{deviceName}/state\","
-                        + f"\"value_template\":\"{{{{value_json.service_status_{service['name'].lower()}}}}}\","
+                        + f"\"value_template\":\"{{{{ value_json.service_status_{service['name'].lower()} }}}}\","
                         + f"\"unique_id\":\"{deviceName}_sensor_service_status_{service['name'].lower()}\","
                         + f"\"availability_topic\":\"system-sensors/sensor/{deviceName}/availability\","
                         + f"\"device\":{{\"identifiers\":[\"{deviceName}_sensor\"],"
